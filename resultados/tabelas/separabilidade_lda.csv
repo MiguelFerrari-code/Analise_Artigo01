@@ -1,0 +1,7 @@
+Configuracao,N_atributos,Acuracia,Acuracia_balanceada,F1_macro
+Sem máscara - médias de cor,6,0.704 ± 0.020,0.648 ± 0.028,0.650 ± 0.036
+Sem máscara - todos os atributos,18,0.834 ± 0.025,0.798 ± 0.030,0.800 ± 0.031
+Com máscara - médias de cor,6,0.716 ± 0.024,0.641 ± 0.019,0.623 ± 0.024
+Com máscara - cor (média + desvio),12,0.807 ± 0.027,0.765 ± 0.027,0.768 ± 0.029
+Com máscara - textura GLCM,6,0.473 ± 0.019,0.443 ± 0.019,0.446 ± 0.017
+Com máscara - cor + textura (proposto),18,0.837 ± 0.030,0.804 ± 0.034,0.807 ± 0.035

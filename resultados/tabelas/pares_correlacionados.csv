@@ -1,0 +1,7 @@
+Atributo_1,Atributo_2,rho
+HSV_V_media,LAB_L_media,0.986
+GLCM_Dissimilaridade,GLCM_Homogeneidade,-0.986
+GLCM_Energia,GLCM_Entropia,-0.978
+GLCM_Contraste,GLCM_Dissimilaridade,0.97
+HSV_V_desvio,LAB_L_desvio,0.931
+GLCM_Contraste,GLCM_Homogeneidade,-0.919

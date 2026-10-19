@@ -1,2 +1,4 @@
-venv
+venv/
 dataset_recortado/
+__pycache__/
+*.cache

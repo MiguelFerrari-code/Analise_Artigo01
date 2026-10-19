@@ -1,81 +1,138 @@
+"""
+ETAPA 02 - Extração de atributos de cor (HSV, LAB) e textura (GLCM)
+
+Para cada lesão recortada na Etapa 01, calcula os atributos SOMENTE sobre os
+pixels da máscara da lesão (tecido sadio e fundo são ignorados).
+
+Atributos (18 no total):
+  Cor (12): média e desvio-padrão de H, S, V (HSV) e de L*, a*, b* (LAB);
+            para o matiz H usam-se média e desvio circulares.
+  Textura (6): Contraste, Dissimilaridade, Homogeneidade, Energia,
+               Correlação e Entropia, extraídos da GLCM (Haralick et al., 1973).
+
+Parâmetros da GLCM:
+  - imagem em tons de cinza quantizada em NIVEIS_CINZA níveis
+    (256 níveis geram matrizes esparsas demais para recortes de ~150 px);
+  - distâncias 1 e 2 px; ângulos 0°, 45°, 90° e 135°;
+  - matriz simétrica; cada atributo é a média sobre as 8 combinações
+    (média angular torna o descritor aproximadamente invariante à rotação);
+  - apenas pares de pixels em que AMBOS pertencem à lesão são contados.
+
+Para medir o efeito da segmentação, o script também gera uma base com os
+mesmos atributos calculados sobre a caixa inteira (sem máscara).
+
+Saídas:
+  base_tabular_tcc.csv                (com máscara - base principal)
+  base_tabular_sem_mascara.csv        (caixa inteira - usada na comparação)
+"""
 import os
 import cv2
 import numpy as np
 import pandas as pd
 from skimage.feature import graycomatrix, graycoprops
 
-# Caminho para a pasta onde os recortes foram salvos na etapa anterior
-PASTA_DATASET = 'dataset_recortado/'
+PASTA_DATASET = "dataset_recortado"
+REGISTRO = os.path.join("resultados", "tabelas", "registro_recortes.csv")
 
-# Lista que vai guardar as linhas da nossa planilha (DataFrame)
-dados_tcc = []
+NIVEIS_CINZA = 32
+DISTANCIAS = [1, 2]
+ANGULOS = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4]
+PROPRIEDADES = {
+    "contrast": "GLCM_Contraste",
+    "dissimilarity": "GLCM_Dissimilaridade",
+    "homogeneity": "GLCM_Homogeneidade",
+    "energy": "GLCM_Energia",
+    "correlation": "GLCM_Correlacao",
+}
 
-print("A iniciar a extração rigorosa de matrizes HSV, LAB e GLCM...")
 
-# Percorre as pastas de cada doença
-for nome_doenca in os.listdir(PASTA_DATASET):
-    caminho_doenca = os.path.join(PASTA_DATASET, nome_doenca)
-    
-    if not os.path.isdir(caminho_doenca):
-        continue
-        
-    print(f"A processar lesões da classe: {nome_doenca}...")
-    
-    for nome_imagem in os.listdir(caminho_doenca):
-        caminho_img = os.path.join(caminho_doenca, nome_imagem)
-        imagem_rgb = cv2.imread(caminho_img)
-        
-        if imagem_rgb is None:
+def atributos_cor(imagem_bgr, mascara):
+    """Média e desvio-padrão dos canais HSV e LAB dentro da máscara."""
+    hsv = cv2.cvtColor(imagem_bgr, cv2.COLOR_BGR2HSV)
+    lab = cv2.cvtColor(imagem_bgr, cv2.COLOR_BGR2LAB)
+    m = mascara > 0
+    r = {}
+    for espaco, img, canais in (("HSV", hsv, "HSV"), ("LAB", lab, "LAB")):
+        for i, canal in enumerate(canais):
+            valores = img[..., i][m].astype(float)
+            if espaco == "HSV" and canal == "H":
+                media, desvio = estatistica_circular_matiz(valores)
+            else:
+                media, desvio = valores.mean(), valores.std()
+            r[f"{espaco}_{canal}_media"] = media
+            r[f"{espaco}_{canal}_desvio"] = desvio
+    return r
+
+
+def estatistica_circular_matiz(h):
+    """Média e desvio circulares do matiz (OpenCV: 0-179 representa 0-358°).
+    O matiz é um ângulo: tons vermelhos/marrons ficam perto de 0 e de 179 ao
+    mesmo tempo, e a média aritmética comum distorceria esses valores."""
+    ang = h * (2 * np.pi / 180.0)
+    c, s = np.cos(ang).mean(), np.sin(ang).mean()
+    media = (np.arctan2(s, c) % (2 * np.pi)) * 180.0 / (2 * np.pi)
+    R = np.clip(np.hypot(c, s), 1e-12, 1.0)
+    desvio = np.sqrt(-2 * np.log(R)) * 180.0 / (2 * np.pi)
+    return media, desvio
+
+
+def atributos_textura(imagem_bgr, mascara):
+    """Atributos de Haralick a partir da GLCM restrita aos pixels da lesão."""
+    cinza = cv2.cvtColor(imagem_bgr, cv2.COLOR_BGR2GRAY)
+    # Quantização: níveis 1..NIVEIS_CINZA para a lesão; 0 marca "fora da máscara"
+    q = (cinza.astype(np.uint16) * NIVEIS_CINZA // 256 + 1).astype(np.uint8)
+    q[mascara == 0] = 0
+
+    glcm = graycomatrix(q, DISTANCIAS, ANGULOS, levels=NIVEIS_CINZA + 1,
+                        symmetric=True, normed=False)
+    # Descarta linha/coluna 0: pares que envolvem pixels fora da lesão
+    glcm = glcm[1:, 1:, :, :].astype(float)
+    soma = glcm.sum(axis=(0, 1), keepdims=True)
+    soma[soma == 0] = 1
+    glcm /= soma
+
+    r = {}
+    for prop, nome in PROPRIEDADES.items():
+        valores = graycoprops(glcm, prop)
+        r[nome] = float(np.nanmean(valores)) if np.isfinite(valores).any() else 0.0
+    # Entropia média sobre as 8 matrizes (distância x ângulo)
+    entropias = [-(g[g > 0] * np.log2(g[g > 0])).sum()
+                 for g in np.moveaxis(glcm.reshape(NIVEIS_CINZA, NIVEIS_CINZA, -1), -1, 0)]
+    r["GLCM_Entropia"] = float(np.mean(entropias))
+    return r
+
+
+def main():
+    registro = pd.read_csv(REGISTRO)
+    registro = registro[~registro["Excluida"]]
+    print(f"Extraindo atributos de {len(registro)} lesões...")
+
+    com_mascara, sem_mascara = [], []
+    for i, linha in enumerate(registro.itertuples(index=False), 1):
+        pasta = os.path.join(PASTA_DATASET, linha.Classe)
+        imagem = cv2.imread(os.path.join(pasta, linha.ID_Lesao + ".jpg"))
+        mascara = cv2.imread(os.path.join(pasta, linha.ID_Lesao + "_mask.png"), cv2.IMREAD_GRAYSCALE)
+        if imagem is None or mascara is None:
             continue
-            
-        # EXTRAÇÃO 1: Espaço de Cor HSV
-        imagem_hsv = cv2.cvtColor(imagem_rgb, cv2.COLOR_BGR2HSV)
-        h_media = np.mean(imagem_hsv[:, :, 0])
-        s_media = np.mean(imagem_hsv[:, :, 1])
-        v_media = np.mean(imagem_hsv[:, :, 2])
+        ident = {"ID_Lesao": linha.ID_Lesao, "ID_Folha": linha.ID_Folha, "Classe": linha.Classe}
 
-        # EXTRAÇÃO 2: Espaço de Cor LAB (Conforme Quadro 2 do Pré-TCC)
-        imagem_lab = cv2.cvtColor(imagem_rgb, cv2.COLOR_BGR2LAB)
-        l_media = np.mean(imagem_lab[:, :, 0])
-        a_media = np.mean(imagem_lab[:, :, 1])
-        b_media = np.mean(imagem_lab[:, :, 2])
-        
-        # EXTRAÇÃO 3: Textura GLCM
-        # A GLCM exige conversão para tons de cinza
-        imagem_cinza = cv2.cvtColor(imagem_rgb, cv2.COLOR_BGR2GRAY)
-        
-        # Calculando a matriz GLCM (distância=1 pixel, ângulo=0 radianos)
-        glcm = graycomatrix(imagem_cinza, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
-        
-        # Extraindo as propriedades (Features) exigidas no método
-        contraste = graycoprops(glcm, 'contrast')[0, 0]
-        homogeneidade = graycoprops(glcm, 'homogeneity')[0, 0]
-        energia = graycoprops(glcm, 'energy')[0, 0]
-        correlacao = graycoprops(glcm, 'correlation')[0, 0]
-        
-        # Adiciona a linha (registo) na nossa lista de dados
-        dados_tcc.append({
-            'Nome_Arquivo': nome_imagem,
-            'Classe': nome_doenca,
-            'HSV_H': h_media,
-            'HSV_S': s_media,
-            'HSV_V': v_media,
-            'LAB_L': l_media,
-            'LAB_A': a_media,
-            'LAB_B': b_media,
-            'GLCM_Contraste': contraste,
-            'GLCM_Homogeneidade': homogeneidade,
-            'GLCM_Energia': energia,
-            'GLCM_Correlacao': correlacao
-        })
+        com_mascara.append({**ident, **atributos_cor(imagem, mascara),
+                            **atributos_textura(imagem, mascara)})
+        caixa = np.full(mascara.shape, 255, np.uint8)
+        sem_mascara.append({**ident, **atributos_cor(imagem, caixa),
+                            **atributos_textura(imagem, caixa)})
+        if i % 300 == 0:
+            print(f"  {i} lesões processadas")
 
-# Cria um DataFrame do Pandas com os dados extraídos
-df = pd.DataFrame(dados_tcc)
+    df = pd.DataFrame(com_mascara)
+    df.to_csv("base_tabular_tcc.csv", index=False)
+    pd.DataFrame(sem_mascara).to_csv("base_tabular_sem_mascara.csv", index=False)
 
-# Salva em um ficheiro CSV (Base Tabular Sólida - Saída do Artigo 1)
-NOME_CSV = 'base_tabular_tcc.csv'
-df.to_csv(NOME_CSV, index=False)
+    n_attr = df.shape[1] - 3
+    print(f"\nBase principal: {len(df)} lesões x {n_attr} atributos -> base_tabular_tcc.csv")
+    print("Base de comparação (sem máscara) -> base_tabular_sem_mascara.csv")
+    print(df["Classe"].value_counts().sort_index().to_string())
 
-print(f"\nExtração concluída com sucesso!")
-print(f"Total de lesões mapeadas matematicamente: {len(df)}")
-print(f"Ficheiro gerado e pronto para o PCA: {NOME_CSV}")
+
+if __name__ == "__main__":
+    main()
