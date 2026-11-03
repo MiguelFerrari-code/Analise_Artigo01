@@ -280,13 +280,17 @@ extracao = pd.DataFrame([{"Etapa": "Segmentação", "Mediana_ms": np.median(temp
 extracao.round(3).to_csv(os.path.join(PASTA_TAB, "custo_extracao.csv"), index=False)
 print("\nCusto:\n", custo.round(3).to_string(index=False)); print(extracao.round(2).to_string(index=False))
 
+# deslocamento dos rótulos que se sobrepõem (LDA e XGBoost têm latência parecida)
+DESLOC_ROTULO = {"LDA": (25, -22, "left"), "XGBoost": (-25, 22, "right")}
 fig, ax = plt.subplots(figsize=(8, 5))
 for r in custo.itertuples():
     ab = resumo.set_index("Modelo").loc[r.Modelo, "Acuracia_balanceada"]
     ax.scatter(r.Latencia_1_lesao_ms, ab, s=40 + r.Tamanho_KB / 5, color=CORES[r.Modelo], alpha=.8, edgecolor="k")
-    ax.annotate(f"{r.Modelo}\n{r.Tamanho_KB:.0f} KB", (r.Latencia_1_lesao_ms, ab), xytext=(8, -4),
-                textcoords="offset points", fontsize=9)
-ax.set_xscale("log"); ax.set_xlabel("Tempo de inferência de 1 lesão (ms, escala log)")
+    dx, dy, ha = DESLOC_ROTULO.get(r.Modelo, (10, -4, "left"))
+    ax.annotate(f"{r.Modelo}\n{r.Tamanho_KB:.0f} KB", (r.Latencia_1_lesao_ms, ab), xytext=(dx, dy),
+                textcoords="offset points", fontsize=9, va="center", ha=ha,
+                arrowprops=dict(arrowstyle="-", color="0.5", lw=.6) if r.Modelo in DESLOC_ROTULO else None)
+ax.set_xscale("log"); ax.margins(x=.25, y=.12); ax.set_xlabel("Tempo de inferência de 1 lesão (ms, escala log)")
 ax.set_ylabel("Acurácia balanceada média"); ax.grid(alpha=.3)
 plt.tight_layout(); plt.savefig(os.path.join(PASTA_FIG, "fig_custo_desempenho.png"), dpi=300); plt.close()
-print("\nFiguras em", PASTA_FIG)
+print("\nFiguras em", PASTA_FIG)git add 07_analise_resultados.py
