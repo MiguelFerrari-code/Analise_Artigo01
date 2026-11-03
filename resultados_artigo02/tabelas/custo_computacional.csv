@@ -1,0 +1,6 @@
+Modelo,Tamanho_KB,Latencia_1_lesao_ms,Inferencia_em_lote_ms_por_lesao,Tempo_ajuste_final_com_busca_s
+LDA,3.3809,0.549,0.0005,0.0092
+Random Forest,10243.9619,28.2668,0.0398,140.7762
+SVM (RBF),122.4424,0.6347,0.09,10.341
+XGBoost,2099.7812,0.5569,0.0317,97.6533
+LightGBM,1273.7061,1.0781,0.0543,89.2498

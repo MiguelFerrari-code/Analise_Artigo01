@@ -1,0 +1,2 @@
+Modelo,AB_18_atributos,AB_13_atributos,Diferenca,p_t_corrigido,Removidos
+LightGBM,0.8146,0.8115,0.0031,0.6943,"HSV_V_media, HSV_V_desvio, GLCM_Dissimilaridade, GLCM_Contraste, GLCM_Energia"

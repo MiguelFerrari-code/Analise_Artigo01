@@ -1,0 +1,12 @@
+Comparacao,Diferenca_AB,t,p,p_Holm,Significativo
+LightGBM x LDA,0.0079,0.7711,0.4534,1.0,False
+LightGBM sem peso x LDA,0.0059,0.4327,0.6718,1.0,False
+Random Forest x LDA,-0.0069,-0.5535,0.5887,1.0,False
+SVM (RBF) x LDA,0.0467,3.2798,0.0055,0.0329,True
+XGBoost x LDA,0.0013,0.1242,0.9029,1.0,False
+XGBoost sem peso x LDA,0.0028,0.2717,0.7898,1.0,False
+SVM (RBF) x LightGBM,0.0388,4.6459,0.0004,0.003,True
+SVM (RBF) x LightGBM sem peso,0.0408,3.514,0.0034,0.0241,True
+SVM (RBF) x Random Forest,0.0536,4.7765,0.0003,0.003,True
+SVM (RBF) x XGBoost,0.0454,5.066,0.0002,0.0019,True
+SVM (RBF) x XGBoost sem peso,0.044,4.7264,0.0003,0.003,True
